@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pacman AI Demo</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Pacman AI Demo</h1>
+            <p>Watch AI agents solve Pacman mazes using A* search and Alpha-Beta pruning</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="layout-select">Layout:</label>
+                <select id="layout-select">
+                    <option value="tinyMaze">Tiny Maze</option>
+                    <option value="mediumMaze">Medium Maze</option>
+                    <option value="q1a_tinyMaze">Q1a Tiny Maze</option>
+                    <option value="q1b_mediumCorners">Q1b Medium Corners</option>
+                    <option value="q2Classic">Q2 Classic (with Ghost)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="algorithm-select">Algorithm:</label>
+                <select id="algorithm-select">
+                    <option value="astar">A* Search (Single Dot)</option>
+                    <option value="astar_multi">A* Multi-Dot</option>
+                    <option value="astar_full">A* Full Clear</option>
+                    <option value="alpha_beta">Alpha-Beta (vs Ghost)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="depth-input">Search Depth:</label>
+                <input type="number" id="depth-input" value="2" min="1" max="5">
+            </div>
+
+            <div class="button-group">
+                <button id="solve-btn" onclick="solveMaze()">Solve Maze</button>
+                <button id="play-btn" onclick="playGame()">Play Game</button>
+                <button id="reset-btn" onclick="resetCanvas()">Reset</button>
+            </div>
+        </div>
+
+        <div class="game-area">
+            <canvas id="game-canvas" width="600" height="600"></canvas>
+            <div class="stats">
+                <div class="stat">
+                    <span class="stat-label">Score:</span>
+                    <span id="score-value">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Moves:</span>
+                    <span id="moves-value">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Status:</span>
+                    <span id="status-value">Ready</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <h3>How it works</h3>
+            <ul>
+                <li><strong>A* Search:</strong> Finds optimal path to nearest dot using heuristic</li>
+                <li><strong>Alpha-Beta:</strong> Game-tree search against ghost opponents</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
