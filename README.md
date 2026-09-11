@@ -10,7 +10,8 @@ A web-based Pacman AI demonstration showcasing **A\* search** and **Alpha-Beta p
 
 ## Live Demo
 
-[![Deploy](https://img.shields.io/badge/Deploy-AWS%20EC2-blue)](http://YOUR_EC2_IP:8000)
+[![Deploy](https://img.shields.io/badge/Deploy-AWS%20EC2-blue)](http://52.91.111.241:8000)
+[![Live](https://img.shields.io/badge/Live-App-green)](http://52.91.111.241:8000)
 [![Video](https://img.shields.io/badge/Video-Watch-red)](docs/pacman_ai_demo.mp4)
 
 ## Algorithms Implemented
