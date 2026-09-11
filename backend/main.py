@@ -170,7 +170,7 @@ async def play(request: PlayRequest):
         frames=frames,
         final_score=state.get_score(),
         win=state.is_win(),
-        total_move=len(frames)
+        total_moves=len(frames)
     )
 
 
