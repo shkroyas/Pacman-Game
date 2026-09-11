@@ -2,9 +2,16 @@
 
 A web-based Pacman AI demonstration showcasing **A\* search** and **Alpha-Beta pruning** algorithms.
 
+<div align="center">
+
+![Pacman AI Demo](docs/pacman_demo.gif)
+
+</div>
+
 ## Live Demo
 
 [![Deploy](https://img.shields.io/badge/Deploy-AWS%20EC2-blue)](http://YOUR_EC2_IP:8000)
+[![Video](https://img.shields.io/badge/Video-Watch-red)](docs/pacman_ai_demo.mp4)
 
 ## Algorithms Implemented
 
@@ -13,10 +20,22 @@ A web-based Pacman AI demonstration showcasing **A\* search** and **Alpha-Beta p
 - Multi-dot search with minimum food distance heuristic
 - Full board clear with food-count heuristic
 
+<div align="center">
+
+![A* Search Demo](docs/pacman_astar_demo.gif)
+
+</div>
+
 ### Alpha-Beta Pruning
 - Adversarial game-tree search against ghost opponents
 - Configurable search depth
 - Evaluation function combining score, food distance, and ghost proximity
+
+<div align="center">
+
+![Gameplay Demo](docs/pacman_gameplay_demo.gif)
+
+</div>
 
 ## Tech Stack
 
@@ -77,6 +96,11 @@ pacman-game/
 │   └── q1c_solver.py         # Full clear solver
 ├── layouts/                  # Maze layout files
 ├── tests/                    # Unit tests
+├── docs/
+│   ├── pacman_demo.gif       # Main demo GIF
+│   ├── pacman_astar_demo.gif # A* search demo
+│   ├── pacman_gameplay_demo.gif # Gameplay demo
+│   └── pacman_ai_demo.mp4    # Full demo video
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
@@ -91,6 +115,14 @@ pacman-game/
 | `/api/solve` | POST | Solve a maze with specified algorithm |
 | `/api/play` | POST | Play a full game with Alpha-Beta agent |
 | `/api/health` | GET | Health check |
+
+## Features
+
+- **Interactive Web Interface**: Watch AI agents solve mazes in real-time
+- **Multiple Algorithms**: Choose between A* search and Alpha-Beta pruning
+- **Configurable Depth**: Adjust search depth for Alpha-Beta agent
+- **Multiple Layouts**: Test on different maze configurations
+- **Real-time Visualization**: Canvas-based rendering with smooth animations
 
 ## AWS Deployment
 

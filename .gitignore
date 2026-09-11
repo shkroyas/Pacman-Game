@@ -9,3 +9,4 @@ venv/
 .idea/
 *.egg-info/
 node_modules/
+docs/demo_frames/
