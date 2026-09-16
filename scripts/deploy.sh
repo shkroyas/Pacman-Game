@@ -13,7 +13,6 @@ HEALTH_URL="${3:-http://localhost:8000/api/health}"
 HEALTH_RETRIES=10
 HEALTH_INTERVAL=5
 LAST_GOOD_PARAM="/pacman/last-good-tag"
-DOCKER_COMPOSE="/usr/local/bin/docker-compose"
 
 exec > >(tee /var/log/deploy.log) 2>&1
 echo "=== Deploy started at $(date -u) ==="
@@ -42,8 +41,10 @@ aws ecr get-login-password --region us-east-1 | \
 
 docker pull "$ECR_REPO:$DEPLOY_TAG"
 
-# --- Stop any old container running the backend ---
-echo "Cleaning up old containers..."
+# --- Stop old container if running ---
+echo "Stopping old containers..."
+docker stop pacman-game-backend-1 2>/dev/null || true
+docker rm pacman-game-backend-1 2>/dev/null || true
 docker stop pacman-app 2>/dev/null || true
 docker rm pacman-app 2>/dev/null || true
 
@@ -53,7 +54,7 @@ export ECR_REPO_URL="$ECR_REPO"
 
 # --- Restart only the backend service ---
 echo "Restarting backend service with tag $DEPLOY_TAG..."
-$DOCKER_COMPOSE up -d --force-recreate --no-deps backend
+/usr/local/bin/docker-compose up -d --force-recreate --no-deps backend
 
 # --- Health check ---
 echo "Waiting for backend to become healthy..."
@@ -92,7 +93,7 @@ else
   if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "None" ]; then
     echo "Rolling back to last known good tag: $PREV_TAG"
     export IMAGE_TAG="$PREV_TAG"
-    $DOCKER_COMPOSE up -d --force-recreate --no-deps backend
+    /usr/local/bin/docker-compose up -d --force-recreate --no-deps backend
 
     sleep $HEALTH_INTERVAL
     if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
