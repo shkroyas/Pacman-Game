@@ -87,25 +87,30 @@ async def solve(request: SolveRequest):
 
     state = GameState(layout)
 
-    async def _run_solve():
-        if request.algorithm == "astar":
+    algorithm = request.algorithm
+
+    def _run_solve_sync():
+        if algorithm == "astar":
             problem = Q1aProblem(state)
             return a_star_solver(problem, manhattan_heuristic)
-        elif request.algorithm == "astar_multi":
+        elif algorithm == "astar_multi":
             problem = Q1bProblem(state)
             return a_star_multi_solver(problem, min_food_heuristic)
-        elif request.algorithm == "astar_full":
+        elif algorithm == "astar_full":
             problem = Q1cProblem(state)
             return a_star_full_solver(problem)
         else:
-            raise HTTPException(status_code=400, detail=f"Unknown algorithm: {request.algorithm}")
+            raise ValueError(f"Unknown algorithm: {algorithm}")
 
     try:
-        actions = await asyncio.wait_for(asyncio.to_thread(
-            lambda: asyncio.get_event_loop().run_until_complete(_run_solve())
-        ), timeout=10.0)
+        actions = await asyncio.wait_for(
+            asyncio.to_thread(_run_solve_sync),
+            timeout=10.0
+        )
     except asyncio.TimeoutError:
         raise HTTPException(status_code=408, detail="Solver timed out (10s limit)")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     moves = []
     current_state = state

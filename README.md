@@ -610,23 +610,32 @@ pacman-game/
 
 ## 🧹 Code Quality
 
-### Audit Fixes (v2)
+### Audit Fixes (v2.1)
 
-All 14 issues from the code audit have been resolved:
+All 14 issues from the code audit have been resolved, plus a follow-up async runtime bug:
 
 | Severity | Count | Status |
 |----------|-------|--------|
 | 🔴 Critical | 5 | ✅ Fixed |
 | 🟠 High | 5 | ✅ Fixed |
 | 🟡 Medium | 4 | ✅ Fixed |
+| 🔵 Follow-up | 1 | ✅ Fixed |
 
 **Key Fixes:**
-- Ghost collision now properly ends the game
-- Power capsules activate scared state (ghosts flee for 40 moves)
-- Ghost scared behavior: flees instead of chases
-- Canvas auto-resizes to match layout dimensions
-- API timeout prevents server blocking
-- Frontend error handling for failed requests
+- Ghost collision now properly ends the game (`is_lose()` checks Pacman vs ghost positions)
+- Power capsules activate scared state (`agent_scared_timers` set to 40, decremented each ghost step)
+- Ghost scared behavior correctly flees (`worst_action` computed and returned when scared)
+- Duplicate `AgentRules` removed from `game.py`; `Game.run()` imports from `layout`
+- Alpha-beta `max_value` now uses the correct `agent_index` parameter
+- Canvas auto-resizes to match layout dimensions (`canvas.width/height` set in `parseLayout`)
+- Walls sent only in first play frame; subsequent frames use `cachedWalls`
+- `alpha_beta` option removed from Solve dropdown (belongs to Play Game via the Play button)
+- Hardcoded layout `<option>` tags replaced by single loading placeholder
+- Frontend `response.ok` check added to both `solveMaze()` and `playGame()`
+- Q1c heuristic changed to `min_dist / 2.0` (admissible underestimate)
+- Ghost placeholder changed from `(0,0)` to `(-1,-1)` (out-of-bounds, treated as wall)
+- `numpy` removed from `requirements.txt`
+- **v2.1:** Solver timeout rewritten — removed `async`-inside-`asyncio.to_thread` pattern that raises `RuntimeError` on a running event loop; now uses a plain sync helper `_run_solve_sync` passed directly to `asyncio.to_thread`
 
 ---
 
