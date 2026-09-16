@@ -1,359 +1,407 @@
-# Pacman AI Demo
+<h1 align="center">🎮 Pacman AI — Production Deployment on AWS</h1>
 
-A web-based Pacman AI demonstration showcasing **A\* search** and **Alpha-Beta pruning** algorithms.
+<p align="center">
+  <em>A web-based Pacman AI demo showcasing A* search and Alpha-Beta pruning,<br>
+  deployed with production-grade CI/CD on AWS using Terraform, ECR, and GitHub Actions.</em>
+</p>
+
+<p align="center">
+  <a href="http://32.199.240.6:8000">
+    <img src="https://img.shields.io/badge/Live%20Demo-http%3A%2F%2F32.199.240.6%3A8000-brightgreen?style=for-the-badge" alt="Live Demo">
+  </a>
+  <a href="https://github.com/shkroyas/Pacman-Game/actions">
+    <img src="https://img.shields.io/github/actions/workflow/status/shkroyas/Pacman-Game/deploy.yml?branch=main&style=for-the-badge&label=CI/CD" alt="Pipeline Status">
+  </a>
+  <a href="docs/cost-estimate.md">
+    <img src="https://img.shields.io/badge/Cost-~%240%2Fmo%20(free%20tier)-blue?style=for-the-badge" alt="Cost">
+  </a>
+</p>
+
+---
+
+## 📺 Demo
 
 <div align="center">
 
 ![Pacman AI Demo](docs/pacman_demo.gif)
 
-</div>
-
-## Live Demo
-
-[![Deploy](https://img.shields.io/badge/Deploy-AWS%20EC2-blue)](http://32.199.240.6)
-[![Live](https://img.shields.io/badge/Live-App-green)](http://32.199.240.6)
-[![Video](https://img.shields.io/badge/Video-Watch-red)](docs/pacman_ai_demo.mp4)
-
-## Algorithms Implemented
-
-### A* Search
-- Single-dot pathfinding with Manhattan distance heuristic
-- Multi-dot search with minimum food distance heuristic
-- Full board clear with food-count heuristic
-
-<div align="center">
-
-![A* Search Demo](docs/pacman_astar_demo.gif)
+*AI agents solving Pacman mazes using A\* search and Alpha-Beta pruning*
 
 </div>
 
-### Alpha-Beta Pruning
-- Adversarial game-tree search against ghost opponents
-- Configurable search depth
-- Evaluation function combining score, food distance, and ghost proximity
+### 🎥 Videos
 
-<div align="center">
+| Demo | Description |
+|------|-------------|
+| [![A* Demo](docs/pacman_astar_demo.gif)](docs/pacman_ai_demo.mp4) | **A\* Search** — Optimal pathfinding with Manhattan heuristic |
+| [![Gameplay Demo](docs/pacman_gameplay_demo.gif)](docs/pacman_ai_demo.mp4) | **Alpha-Beta** — Adversarial game-tree search vs ghosts |
 
-![Gameplay Demo](docs/pacman_gameplay_demo.gif)
+[▶️ Watch full demo video](docs/pacman_ai_demo.mp4)
 
-</div>
+---
 
-## Tech Stack
+## 🏗️ Architecture
 
-- **Backend**: Python, FastAPI
-- **Frontend**: HTML5 Canvas, JavaScript
-- **Deployment**: Docker, Nginx, AWS EC2, Terraform
-- **CI/CD**: GitHub Actions → ECR → SSM → EC2
-- **Monitoring**: CloudWatch Logs, Alarms, Synthetics Canary
-
-## Quick Start
-
-### Local Development
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the server
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-
-# Open browser
-open http://localhost:8000
+```mermaid
+graph TB
+    User([👤 User Browser])
+    
+    subgraph AWS["☁️ AWS Cloud"]
+        EIP["🌐 Elastic IP<br/>32.199.240.6"]
+        
+        subgraph EC2["🖥️ EC2 t3.micro"]
+            Nginx["🔀 Nginx<br/>:80 / :443"]
+            Backend["🐍 FastAPI Backend<br/>:8000"]
+            Certbot["🔒 Certbot<br/>TLS Renewal"]
+        end
+        
+        ECR["📦 ECR<br/>Container Registry"]
+        SSM["⚙️ SSM Parameter Store"]
+        CW["📊 CloudWatch<br/>Logs + Alarms"]
+        Canary["🔍 Synthetics Canary<br/>Health Check /5min"]
+        SNS["📧 SNS<br/>Email Alerts"]
+    end
+    
+    User --> EIP
+    EIP --> Nginx
+    Nginx --> Backend
+    Backend -.->|"Docker Network"| Nginx
+    
+    ECR -->|"docker pull"| EC2
+    SSM -->|"Deploy Command"| EC2
+    Backend -->|"Logs"| CW
+    Canary -->|"/api/health"| Backend
+    CW -->|"Alarm"| SNS
 ```
 
-### Docker
+### Component Overview
 
-```bash
-# Build image
-docker build -t pacman-ai .
+| Component | Purpose | Technology |
+|-----------|---------|------------|
+| **Frontend** | Interactive maze visualization | HTML5 Canvas, JavaScript |
+| **Backend** | AI algorithms + REST API | Python 3.11, FastAPI, Uvicorn |
+| **Reverse Proxy** | TLS termination, compression | Nginx (sidecar container) |
+| **Container Registry** | Docker image storage | Amazon ECR |
+| **Infrastructure** | All AWS resources | Terraform (IaC) |
+| **CI/CD** | Automated build + deploy | GitHub Actions → ECR → SSM |
+| **Monitoring** | Logs, metrics, health checks | CloudWatch, Synthetics |
 
-# Run with docker-compose (includes Nginx reverse proxy)
-docker compose up -d
+---
 
-# Or run standalone (dev mode)
-docker run -p 8000:8000 pacman-ai
+## 🔄 CI/CD Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    git push origin main                      │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  🧪 TEST                                                    │
+│  ┌─────────────┐  ┌─────────────┐                           │
+│  │  pytest      │  │  flake8     │                           │
+│  │  (8 tests)   │  │  (lint)     │                           │
+│  └──────┬──────┘  └──────┬──────┘                           │
+│         └───────┬────────┘                                  │
+│                 ▼                                            │
+│  ✅ All tests pass                                           │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  🐳 BUILD & PUSH TO ECR                                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ docker build  │→ │ docker tag    │→ │ docker push   │      │
+│  │ :${SHA}       │  │ :${SHA}       │  │ to ECR        │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│  Image: 211125530162.dkr.ecr.us-east-1.amazonaws.com/      │
+│         pacman-game:${GIT_SHA}                              │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  🚀 DEPLOY TO EC2                                           │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  SSM Run Command → EC2                              │     │
+│  │                                                      │     │
+│  │  1. curl deploy.sh from GitHub                       │     │
+│  │  2. docker pull ${ECR}:${SHA}                        │     │
+│  │  3. docker stop old container                        │     │
+│  │  4. docker run new container                         │     │
+│  │  5. curl /api/health (10 retries)                    │     │
+│  │  6. ✅ Health check passed → update SSM param         │     │
+│  │     ❌ Health check failed → rollback to last good    │     │
+│  └────────────────────────────────────────────────────┘     │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  ✅ LIVE at http://32.199.240.6:8000                         │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Project Structure
+---
+
+## 🧠 AI Algorithms
+
+### A* Search — Intelligent Pathfinding
+
+Finds the shortest path using heuristics to guide the search.
 
 ```
-pacman-game/
-├── backend/
-│   └── main.py              # FastAPI application
-├── frontend/
-│   ├── index.html            # Main HTML page
-│   ├── app.js                # Canvas rendering & API calls
-│   └── style.css             # Styling
-├── agents/
-│   ├── pacmanAgents.py       # Simple agent
-│   ├── ghostAgents.py        # Ghost behaviors
-│   ├── q2Agent.py            # Alpha-Beta agent
-│   └── searchAgents.py       # Search agent base
-├── problems/
-│   ├── q1a_problem.py        # Single dot problem
-│   ├── q1b_problem.py        # Multi-dot problem
-│   └── q1c_problem.py        # Full clear problem
-├── solvers/
-│   ├── q1a_solver.py         # A* solver
-│   ├── q1b_solver.py         # Multi-dot solver
-│   └── q1c_solver.py         # Full clear solver
-├── layouts/                  # Maze layout files
-├── tests/                    # Unit tests
-├── terraform/                # Infrastructure as Code
-│   ├── main.tf               # Provider & backend config
-│   ├── ec2.tf                # EC2 instance + Elastic IP
-│   ├── ecr.tf                # ECR repository + lifecycle
-│   ├── security_groups.tf    # Firewall rules
-│   ├── iam.tf                # EC2 instance role (SSM, ECR, CloudWatch)
-│   ├── cloudwatch.tf         # Logs, alarms, Synthetics canary
-│   ├── ssm.tf                # Parameter Store entries
-│   ├── network.tf            # VPC/subnet data sources
-│   ├── variables.tf          # Input variables
-│   └── outputs.tf            # Exported values
-├── nginx/
-│   └── nginx.conf            # Reverse proxy config
-├── scripts/
-│   ├── deploy.sh             # Automated deploy + rollback
-│   ├── bootstrap.sh          # EC2 first-boot setup
-│   └── renew-cert.sh         # TLS certificate renewal
-├── .github/workflows/
-│   ├── ci.yml                # Test on PRs
-│   └── deploy.yml            # Build → ECR → SSM deploy
-├── docs/
-│   ├── architecture.md       # System design docs
-│   ├── cost-estimate.md      # Monthly cost breakdown
-│   ├── recovery-runbook.md   # Incident response
-│   └── *.gif/mp4             # Demo media
-├── Dockerfile
-├── docker-compose.yml        # Nginx + backend + certbot
-└── requirements.txt
+Brute Force:  Check ALL paths     → O(b^d) operations
+A* Search:    Check SMART paths   → O(b^(d/2)) operations
 ```
 
-## API Endpoints
+| Algorithm | Description | Heuristic |
+|-----------|-------------|-----------|
+| **Q1a** | Single dot search | Manhattan distance |
+| **Q1b** | Multi-dot search | Minimum food distance |
+| **Q1c** | Full board clear | Food count remaining |
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Main page |
-| `/api/layouts` | GET | List available layouts |
-| `/api/solve` | POST | Solve a maze with specified algorithm |
-| `/api/play` | POST | Play a full game with Alpha-Beta agent |
-| `/api/health` | GET | Health check |
+### Alpha-Beta Pruning — Adversarial Decision Making
 
-## Features
+Makes optimal decisions against ghost opponents by pruning impossible branches.
 
-- **Interactive Web Interface**: Watch AI agents solve mazes in real-time
-- **Multiple Algorithms**: Choose between A* search and Alpha-Beta pruning
-- **Configurable Depth**: Adjust search depth for Alpha-Beta agent
-- **Multiple Layouts**: Test on different maze configurations
-- **Real-time Visualization**: Canvas-based rendering with smooth animations
+```
+Minimax:    Explore ALL branches  → 1,000,000 nodes
+Alpha-Beta: Skip IMPOSSIBLE ones → 100,000 nodes
+```
 
-## AWS Deployment
+| Feature | Implementation |
+|---------|---------------|
+| Search depth | Configurable (1-5) |
+| Evaluation | Score + food distance + ghost proximity |
+| Pruning | Alpha-beta with move ordering |
+
+---
+
+## 🚀 Deployment Guide
 
 ### Prerequisites
 
-- AWS CLI configured with access keys
-- Terraform installed locally
-- GitHub repository secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+| Requirement | Check |
+|-------------|-------|
+| AWS CLI configured | `aws sts get-caller-identity` |
+| Terraform installed | `terraform version` |
+| Docker installed | `docker --version` |
+| GitHub repo secrets | `AWS_KEY_ACCESS_ID`, `AWS_SECRET_ACCESS_KEY` |
 
-### Initial Setup
+### Step-by-Step Deployment
+
+#### 1️⃣ Clone & Configure
 
 ```bash
-# 1. Create Terraform backend (S3 + DynamoDB for state locking)
-aws s3 mb s3://pacman-terraform-state --region us-east-1
+git clone https://github.com/shkroyas/Pacman-Game.git
+cd Pacman-Game
+```
+
+#### 2️⃣ Set Up Terraform Backend
+
+```bash
+# Create S3 bucket for state
+aws s3 mb s3://pacman-tf-state-211125530162 --region us-east-1
+
+# Create DynamoDB table for locking
 aws dynamodb create-table \
   --table-name terraform-locks \
   --attribute-definitions AttributeName=LockID,AttributeType=S \
   --key-schema AttributeName=LockID,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST \
   --region us-east-1
+```
 
-# 2. Import existing EC2 instance (if you have one running)
+#### 3️⃣ Deploy Infrastructure
+
+```bash
 cd terraform/
 terraform init
-terraform import aws_instance.app i-XXXXXXXXXXXXXXXXX
-terraform import aws_security_group.app sg-XXXXXXXXXXXXXXXXX
-
-# 3. Deploy infrastructure
 terraform plan
 terraform apply
 ```
 
-### CI/CD Pipeline
-
-Push to `main` branch triggers:
-1. **Test** — pytest + flake8
-2. **Build & Push** — Docker image tagged with Git SHA → ECR
-3. **Deploy** — SSM Run Command pulls new image and restarts the backend
-
-### Manual Deploy
+#### 4️⃣ Push First Image to ECR
 
 ```bash
-# Via SSM from your local machine
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin 211125530162.dkr.ecr.us-east-1.amazonaws.com
+
+# Build and push
+docker build -t pacman-game:latest .
+docker tag pacman-game:latest 211125530162.dkr.ecr.us-east-1.amazonaws.com/pacman-game:latest
+docker push 211125530162.dkr.ecr.us-east-1.amazonaws.com/pacman-game:latest
+```
+
+#### 5️⃣ Configure GitHub Secrets
+
+Go to `https://github.com/shkroyas/Pacman-Game/settings/secrets/actions`:
+
+| Secret Name | Value |
+|-------------|-------|
+| `AWS_KEY_ACCESS_ID` | Your IAM access key |
+| `AWS_SECRET_ACCESS_KEY` | Your IAM secret key |
+
+#### 6️⃣ Push to Trigger Pipeline
+
+```bash
+git add .
+git commit -m "feat: deploy to production"
+git push origin main
+```
+
+**That's it!** The pipeline automatically:
+1. Runs tests
+2. Builds Docker image
+3. Pushes to ECR
+4. Deploys to EC2 via SSM
+
+---
+
+## 📊 Monitoring & Observability
+
+### CloudWatch Dashboard
+
+| Metric | Source | Alert |
+|--------|--------|-------|
+| Application logs | `/pacman-game/application` | Log metric filter |
+| CPU utilization | EC2 metrics | >80% for 5 min → email |
+| Health check failures | Synthetics Canary | Every 5 min |
+| Deploy events | SSM Command history | On failure → rollback |
+
+### Manual Health Check
+
+```bash
+# Check app health
+curl http://32.199.240.6:8000/api/health
+
+# Expected response:
+{"status":"healthy","version":"1.0.0"}
+```
+
+### Viewing Logs
+
+```bash
+# Via CloudWatch Logs
+aws logs tail /pacman-game/application --follow
+
+# Via SSM (SSH-free)
 aws ssm send-command \
   --document-name "AWS-RunShellScript" \
-  --targets "Key=tag:Name,Values=pacman-game-instance" \
-  --parameters "commands=['cd /home/ec2-user/Pacman-Game && sudo ./scripts/deploy.sh <git-sha> <ecr-repo-url>']"
-```
-
-### Architecture
-
-See [docs/architecture.md](docs/architecture.md) for full system design.
-See [docs/cost-estimate.md](docs/cost-estimate.md) for monthly cost breakdown.
-See [docs/recovery-runbook.md](docs/recovery-runbook.md) for incident response.
-
-## Impact of AI in This Project
-
-### Why This Matters
-
-This project demonstrates **fundamental AI concepts** that power real-world systems — from GPS navigation to game-playing engines to autonomous vehicles.
-
----
-
-### 1. A* Search — Intelligent Pathfinding
-
-**What it does:** Finds the shortest path from point A to point B using heuristics to guide the search.
-
-**Real-World Impact:**
-| Application | How A* is Used |
-|-------------|----------------|
-| **Google Maps / GPS** | Route optimization uses A*-like algorithms to find fastest paths |
-| **Robot Navigation** | Robots use A* to navigate warehouses, hospitals, and factories |
-| **Video Games** | NPCs (non-player characters) use A* for realistic movement |
-| **Logistics** | Delivery companies optimize routes for thousands of packages daily |
-| **Network Routing** | Internet packets are routed using shortest-path algorithms |
-
-**Key Insight:** Without A*, computers would brute-force every possible path. A* uses **heuristics** (educated guesses) to search intelligently — cutting millions of calculations to thousands.
-
-```
-Traditional: Check ALL paths → O(b^d) operations
-A* Search:   Check SMART paths → O(b^(d/2)) operations
+  --targets "Key=tag:Name,Values=pacman-ai-server" \
+  --parameters "commands=['docker logs pacman-backend --tail 50']"
 ```
 
 ---
 
-### 2. Alpha-Beta Pruning — Adversarial Decision Making
+## 💰 Cost Breakdown
 
-**What it does:** Makes optimal decisions when an opponent is actively working against you.
+| Resource | Free Tier | After 12 Months |
+|----------|-----------|-----------------|
+| EC2 t3.micro | $0 | ~$8.50/mo |
+| EBS 20GB | $0 | ~$1.60/mo |
+| ECR | $0 | ~$0.10/mo |
+| CloudWatch | $0 | ~$2-3/mo |
+| SNS + SSM | $0 | ~$0.50/mo |
+| **Total** | **~$0/mo** | **~$12-15/mo** |
 
-**Real-World Impact:**
-| Application | How Alpha-Beta is Used |
-|-------------|----------------------|
-| **Chess Engines** | Deep Blue, Stockfish use Alpha-Beta to defeat grandmasters |
-| **Go (AlphaGo)** | Combined with neural networks to beat world champions |
-| **Military Strategy** | Game theory applied to defense and security planning |
-| **Business Negotiations** | Modeling competitive market strategies |
-| **Autonomous Vehicles** | Predicting actions of other drivers in traffic |
+> **Cost optimization**: Nginx sidecar saves ~$16-18/mo vs Application Load Balancer
 
-**Key Insight:** In a competitive environment, you can't just plan your moves — you must anticipate your opponent's best response. Alpha-Beta **prunes** branches that no rational opponent would choose, making search 10x faster.
+See [full cost analysis →](docs/cost-estimate.md)
+
+---
+
+## 📁 Project Structure
 
 ```
-Minimax:    Explore ALL branches → 1,000,000 nodes
-Alpha-Beta: Skip IMPOSSIBLE branches → 100,000 nodes
-```
-
----
-
-### 3. Evaluation Functions — Teaching AI to "Think"
-
-**What it does:** Assigns a numerical score to game states, guiding the AI toward winning positions.
-
-**Real-World Impact:**
-| Application | How Evaluation Functions are Used |
-|-------------|----------------------------------|
-| **Medical Diagnosis** | Scoring patient risk based on multiple health factors |
-| **Credit Scoring** | Banks evaluate loanworthiness using weighted features |
-| **Quality Control** | Manufacturing robots score product quality |
-| **Search Engines** | Google ranks pages using 200+ evaluation signals |
-| **Recommendation Systems** | Netflix, Spotify score content relevance |
-
-**Key Insight:** The evaluation function is where **human expertise** meets **machine computation**. We encode what we know (avoid ghosts, eat food) and let the AI optimize from there.
-
----
-
-### 4. Heuristics — The Art of Good Guesses
-
-**What it does:** Provides fast estimates that guide search without guaranteeing perfection.
-
-**Real-World Impact:**
-| Application | How Heuristics are Used |
-|-------------|------------------------|
-| **GPS Navigation** | "Straight-line distance" as lower bound for travel time |
-| **Chess Engines** | Material count + position evaluation as winning estimate |
-| **Protein Folding** | Energy-based heuristics predict 3D structures |
-| **Scheduling** | Fast estimates help allocate limited resources |
-| **Machine Learning** | Feature selection uses heuristic pruning |
-
-**Key Insight:** A good heuristic can reduce search space by **orders of magnitude** while maintaining near-optimal solutions — the same principle powers everything from recommendation engines to self-driving cars.
-
----
-
-### 5. Multi-Agent Systems — AI in Competition
-
-**What it does:** Multiple AI agents interact, compete, and adapt in real-time.
-
-**Real-World Impact:**
-| Application | How Multi-Agent AI is Used |
-|-------------|--------------------------|
-| **Autonomous Traffic** | Self-driving cars negotiate with each other |
-| **Stock Trading** | High-frequency bots compete in markets |
-| **Cybersecurity** | AI defends against AI-powered attacks |
-| **Smart Grids** | Power distribution optimized across competing demands |
-| **Military Drones** | Coordinated swarm behavior |
-
-**Key Insight:** This project's Pac-Man vs. Ghost dynamic mirrors real competitive AI scenarios where agents must predict and counter opponents' strategies.
-
----
-
-### Summary: From Pac-Man to Production
-
-```
-PAC-MAN AI CONCEPT          REAL-WORLD APPLICATION
-─────────────────────────────────────────────────────
-A* Pathfinding        →     GPS, Robotics, Games
-Alpha-Beta Pruning    →     Chess Engines, Strategy AI
-Evaluation Functions  →     Medical AI, Credit Scoring
-Heuristics            →     Search Engines, ML Features
-Multi-Agent Systems   →     Autonomous Vehicles, Trading
-State Space Search    →     Planning, Optimization
+pacman-game/
+├── backend/main.py              # FastAPI application
+├── frontend/                    # HTML5 Canvas UI
+├── agents/                      # AI agent implementations
+│   ├── q2Agent.py              # Alpha-Beta pruning agent
+│   └── pacmanAgents.py         # Simple agent
+├── solvers/                     # A* search implementations
+│   ├── q1a_solver.py           # Single dot A*
+│   ├── q1b_solver.py           # Multi-dot A*
+│   └── q1c_solver.py           # Full clear A*
+├── problems/                    # Problem definitions
+├── tests/                       # Unit tests (8 tests)
+├── layouts/                     # Maze layout files
+├── terraform/                   # Infrastructure as Code
+│   ├── main.tf                 # Provider & S3 backend
+│   ├── ec2.tf                  # EC2 + Elastic IP
+│   ├── ecr.tf                  # Container registry
+│   ├── iam.tf                  # Instance role (SSM, ECR, CW)
+│   ├── cloudwatch.tf           # Logs, alarms, canary
+│   ├── ssm.tf                  # Parameter Store
+│   └── security_groups.tf      # Firewall rules
+├── nginx/nginx.conf             # Reverse proxy config
+├── scripts/
+│   ├── deploy.sh               # Auto-deploy + rollback
+│   └── bootstrap.sh            # EC2 first-boot setup
+├── .github/workflows/deploy.yml # CI/CD pipeline
+├── docker-compose.yml           # Nginx + Backend + Certbot
+├── Dockerfile                   # Python 3.11 slim
+└── requirements.txt             # Python dependencies
 ```
 
 ---
 
-### Learning Outcomes
+## 🔧 API Endpoints
 
-By building this project, you learn:
-
-1. **Algorithm Design** — How to choose the right algorithm for a problem
-2. **Heuristic Engineering** — How to encode domain knowledge into AI
-3. **Search Optimization** — How to make AI faster with pruning
-4. **Adversarial Reasoning** — How AI makes decisions against opponents
-5. **System Architecture** — How to deploy AI as a production service
-6. **Performance Analysis** — How to measure and optimize AI systems
-
-These are the **exact skills** required for roles in:
-- AI/ML Engineering
-- Game Development
-- Robotics
-- Autonomous Systems
-- Data Science
-- Quantitative Finance
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Web UI |
+| `/api/layouts` | GET | List maze layouts |
+| `/api/solve` | POST | Solve maze with A* |
+| `/api/play` | POST | Play game with Alpha-Beta |
+| `/api/health` | GET | Health check |
 
 ---
 
-## Running Tests
+## 🛡️ Security
+
+- **No inbound SSH** — All management via SSM Run Command
+- **Backend not exposed** — Only reachable from Nginx on Docker network
+- **TLS termination** — Nginx handles HTTPS (once configured)
+- **Secrets in SSM** — No hardcoded credentials
+- **ECR lifecycle** — Untagged images auto-deleted after 7 days
+
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | System design decisions |
+| [Cost Estimate](docs/cost-estimate.md) | Monthly cost breakdown |
+| [Recovery Runbook](docs/recovery-runbook.md) | Incident response guide |
+| [Deployment Guide](DEPLOYMENT.md) | Step-by-step deployment |
+
+---
+
+## 🧪 Running Tests
 
 ```bash
+# Install dependencies
+pip install -r requirements.txt
+pip install pytest
+
+# Run all tests
 python -m pytest tests/ -v
+
+# Run with coverage
+python -m pytest tests/ -v --tb=short
 ```
 
-## Benchmarks
+---
 
-Run benchmarking script:
+## 📄 License
 
-```bash
-python scripts/run_benchmarks.py
-```
+MIT License — see [LICENSE](LICENSE)
 
-## License
+---
 
-MIT License - see [LICENSE](LICENSE)
+<p align="center">
+  <sub>Built with ❤️ using Python, FastAPI, Docker, Terraform, and GitHub Actions</sub>
+</p>

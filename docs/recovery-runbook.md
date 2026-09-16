@@ -1,226 +1,333 @@
-# Recovery Runbook
+# 🔧 Recovery Runbook — Pacman AI
 
-## Scenario 1: EC2 Instance Terminated
-
-**Symptoms**: App unreachable, SSM commands fail
-
-**Recovery steps**:
-```bash
-# From local machine with Terraform installed:
-cd terraform/
-terraform apply -auto-approve
-```
-
-Terraform will:
-1. Recreate the EC2 instance with the same configuration
-2. Reattach the Elastic IP automatically
-3. Run the bootstrap script (installs Docker, pulls latest image, starts containers)
-
-**Verification**:
-```bash
-# Check the instance is running
-aws ec2 describe-instances --filters "Name=tag:Name,Values=pacman-game-instance" \
-  --query "Reservations[0].Instances[0].State.Name" --output text
-
-# Check the app is healthy
-curl -f http://<elastic-ip>/api/health
-```
-
-**Time to recovery**: ~5-10 minutes (instance boot + Docker setup + container start)
+> Quick reference for incident response and common issues.
 
 ---
 
-## Scenario 2: Certificate Expired (Renewal Failed)
+## 🚨 Emergency Contacts
 
-**Symptoms**: Browser shows TLS error, Nginx serving HTTP only
+| Role | Contact |
+|------|---------|
+| AWS Account | 211125530162 |
+| Region | us-east-1 |
+| EC2 Instance | i-0e939da1aaf5336f6 |
+| Elastic IP | 32.199.240.6 |
+| SSH Key | ~/.ssh/pacman-ai-key.pem |
 
-**Recovery steps**:
+---
+
+## 🔴 Critical Issues
+
+### App Down (Health Check Failing)
+
+**Symptoms:**
+- `curl http://32.199.240.6:8000/api/health` fails
+- CloudWatch health alarm triggered
+- Users can't access the app
+
+**Diagnosis:**
+
 ```bash
-# SSH into the instance (or use SSM)
-ssh -i key.pem ec2-user@<elastic-ip>
+# 1. Check instance status
+aws ec2 describe-instances --instance-ids i-0e939da1aaf5336f6 \
+  --query "Reservations[0].Instances[0].State.Name"
 
-# Check certbot logs
-docker compose logs certbot
+# 2. Check Docker containers
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "docker ps -a"
 
-# Force renewal
-cd /home/ec2-user/Pacman-Game
-docker compose run --rm certbot renew --force-renewal --webroot -w /var/www/certbot
-
-# Reload Nginx
-docker compose exec nginx nginx -s reload
+# 3. Check backend logs
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "docker logs pacman-backend --tail 50"
 ```
 
-**If renewal fails completely**:
+**Resolution:**
+
 ```bash
-# Remove old certificate and get a new one
-docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
-  --email your@email.com --agree-tos -d yourdomain.com
+# Option 1: Restart container
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "sudo docker restart pacman-backend"
 
-# Reload Nginx
-docker compose exec nginx nginx -s reload
-```
-
-**Prevention**: Check renewal cron is working:
-```bash
-# View cron logs
-grep certbot /var/log/cron
-
-# Test renewal without actually renewing
-docker compose run --rm certbot renew --dry-run
+# Option 2: Redeploy last good tag
+LAST_GOOD=$(aws ssm get-parameter --name /pacman/last-good-tag --query Parameter.Value --output text)
+aws ssm send-command \
+  --document-name "AWS-RunShellScript" \
+  --targets "Key=tag:Name,Values=pacman-ai-server" \
+  --parameters "commands=['curl -sf https://raw.githubusercontent.com/shkroyas/Pacman-Game/main/scripts/deploy.sh -o /tmp/deploy.sh', 'chmod +x /tmp/deploy.sh', 'sudo /tmp/deploy.sh $LAST_GOOD 211125530162.dkr.ecr.us-east-1.amazonaws.com/pacman-game']" \
+  --region us-east-1
 ```
 
 ---
 
-## Scenario 3: Bad Deploy (Health Check Failed)
+### CI/CD Pipeline Failing
 
-**Symptoms**: Deploy script reports health check failure, rollback was attempted
+**Symptoms:**
+- GitHub Actions showing red/failure
+- Pushes to main don't deploy
 
-**Automatic rollback**:
-The `deploy.sh` script automatically rolls back to the last known good tag if the
-health check fails. Check the deploy log:
+**Common Causes & Fixes:**
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Credentials could not be loaded` | Wrong secret name | Check `AWS_KEY_ACCESS_ID` (not `AWS_ACCESS_KEY_ID`) |
+| `No module named pytest` | Old workflow running | Ensure `ci.yml` is deleted |
+| `unknown shorthand flag: 'd'` | docker-compose issue | Deploy script uses `docker run` now |
+| `dubious ownership` | git safe.directory | Deploy script uses curl, not git |
+
+---
+
+### SSM Command Not Executing
+
+**Symptoms:**
+- Deploy status shows `null`
+- No command invocations found
+
+**Diagnosis:**
+
 ```bash
-# Via SSM or SSH
-cat /var/log/deploy.log
+# Check if SSM agent is registered
+aws ssm describe-instance-information \
+  --query "InstanceInformationList[*].[InstanceId,PingStatus]"
+
+# Check IAM role attachment
+aws ec2 describe-iam-instance-profile-associations \
+  --filters "Name=instance-id,Values=i-0e939da1aaf5336f6"
 ```
 
-**Manual rollback** (if automatic rollback also failed):
+**Resolution:**
+
 ```bash
-# Get the last known good tag from SSM
-LAST_GOOD=$(aws ssm get-parameter --name /pacman/last-good-tag \
-  --query "Parameter.Value" --output text)
+# 1. Attach IAM role if missing
+aws ec2 associate-iam-instance-profile \
+  --instance-id i-0e939da1aaf5336f6 \
+  --iam-instance-profile Name=pacman-game-instance-profile
 
-# Pull and restart with that tag
-cd /home/ec2-user/Pacman-Game
-export IMAGE_TAG="$LAST_GOOD"
-export ECR_REPO_URL="<your-ecr-repo-url>"
-docker compose up -d --force-recreate --no-deps backend
+# 2. Restart SSM agent
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "sudo systemctl restart amazon-ssm-agent"
 
-# Verify health
-curl -f http://localhost:8000/api/health
-```
-
-**Force a specific tag**:
-```bash
-export IMAGE_TAG="<git-sha-of-known-good-commit>"
-export ECR_REPO_URL="<your-ecr-repo-url>"
-docker compose up -d --force-recreate --no-deps backend
+# 3. Verify
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "sudo systemctl status amazon-ssm-agent"
 ```
 
 ---
 
-## Scenario 4: Nginx Misconfiguration Blocking Traffic
+## 🟡 Warning Issues
 
-**Symptoms**: All requests return 502, 500, or connection refused
+### High CPU Usage
 
-**Recovery steps**:
+**Threshold:** >80% for 5 minutes
+
+**Diagnosis:**
+
 ```bash
-# Test Nginx configuration
-docker compose exec nginx nginx -t
+# Check CPU
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "top -bn1 | head -20"
 
-# If config test fails, revert to the last working nginx.conf
-# The config file is committed to git, so:
-cd /home/ec2-user/Pacman-Game
-git checkout main -- nginx/nginx.conf
-
-# Reload with the fixed config
-docker compose exec nginx nginx -s reload
+# Check container resource usage
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "docker stats --no-stream"
 ```
 
-**If Nginx container won't start**:
+**Resolution:**
+
 ```bash
-# Check Nginx logs
-docker compose logs nginx
+# Restart container
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "sudo docker restart pacman-backend"
 
-# Restart the container
-docker compose restart nginx
-
-# Or rebuild from scratch
-docker compose up -d --force-recreate nginx
-```
-
----
-
-## Scenario 5: EC2 Instance Unreachable (Network Issue)
-
-**Symptoms**: Can't SSH, can't reach app, SSM shows instance as "online" but unresponsive
-
-**Recovery steps**:
-1. Check instance status in AWS Console
-2. Check system status checks (hardware issues — AWS handles these)
-3. If instance status check failed:
-   ```bash
-   # Stop and start (not reboot) the instance to migrate to new hardware
-   aws ec2 stop-instances --instance-ids <instance-id>
-   aws ec2 wait instance-stopped --instance-ids <instance-id>
-   aws ec2 start-instances --instance-ids <instance-id>
-   ```
-4. Elastic IP automatically reattaches to the restarted instance
-5. Bootstrap script runs on first boot, so Docker and containers restart automatically
-
----
-
-## Scenario 6: SSM Agent Not Responding
-
-**Symptoms**: SSM commands time out, instance shows as "offline" in SSM
-
-**Recovery steps**:
-```bash
-# Via SSH (temporarily enable port 22 in security group)
-ssh -i key.pem ec2-user@<elastic-ip>
-
-# Check SSM agent status
-sudo systemctl status amazon-ssm-agent
-
-# Restart SSM agent
-sudo systemctl restart amazon-ssm-agent
-
-# If SSM agent is missing or corrupted
-sudo yum install -y amazon-ssm-agent
-sudo systemctl enable amazon-ssm-agent
-sudo systemctl start amazon-ssm-agent
+# If persistent, consider upgrading to t3.small
 ```
 
 ---
 
-## Scenario 7: Disk Full
+### Disk Space Low
 
-**Symptoms**: Deploy fails, containers can't start, health checks fail
+**Diagnosis:**
 
-**Recovery steps**:
 ```bash
-# Check disk usage
-df -h
-
-# Clean up Docker resources
-docker system prune -af --volumes
-
-# Remove old logs
-sudo journalctl --vacuum-size=100M
-
-# Check CloudWatch agent logs aren't consuming too much space
-sudo du -sh /opt/aws/amazon-cloudwatch-agent/
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "df -h && docker system df"
 ```
 
-**Prevention**: The ECR lifecycle policy automatically expires untagged images after 7 days.
+**Resolution:**
+
+```bash
+# Clean Docker resources
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "docker system prune -af --volumes"
+```
 
 ---
 
-## Emergency Contacts
+### ECR Image Not Found
 
-- **AWS Console**: https://console.aws.amazon.com/
-- **GitHub Repo**: https://github.com/shkroyas/Pacman-Game
-- **Terraform State**: S3 bucket `pacman-terraform-state` in us-east-1
+**Symptoms:**
+- Deploy fails with "image not found"
+- Docker pull fails
 
-## Quick Reference Commands
+**Resolution:**
 
-| Action | Command |
-|--------|---------|
-| Check app health | `curl -f http://<ip>/api/health` |
-| View deploy log | `cat /var/log/deploy.log` |
-| View bootstrap log | `cat /var/log/bootstrap.log` |
-| Restart backend | `docker compose restart backend` |
-| Restart Nginx | `docker compose exec nginx nginx -s reload` |
-| Check Nginx config | `docker compose exec nginx nginx -t` |
-| View all containers | `docker compose ps` |
-| View backend logs | `docker compose logs backend` |
-| Force rollback | `export IMAGE_TAG=<tag> && docker compose up -d --force-recreate --no-deps backend` |
+```bash
+# Check ECR images
+aws ecr describe-images \
+  --repository-name pacman-game \
+  --region us-east-1 \
+  --query "imageDetails[*].[imageTags,imagePushedAt]" \
+  --output table
+
+# Rebuild and push
+docker build -t pacman-game:latest .
+docker tag pacman-game:latest 211125530162.dkr.ecr.us-east-1.amazonaws.com/pacman-game:latest
+docker push 211125530162.dkr.ecr.us-east-1.amazonaws.com/pacman-game:latest
+```
+
+---
+
+## 🟢 Routine Tasks
+
+### Deploy New Version
+
+```bash
+# 1. Push to main (triggers CI/CD)
+git push origin main
+
+# 2. Monitor pipeline
+# https://github.com/shkroyas/Pacman-Game/actions
+
+# 3. Verify health
+curl http://32.199.240.6:8000/api/health
+```
+
+### Manual Rollback
+
+```bash
+# Get last known good tag
+LAST_GOOD=$(aws ssm get-parameter \
+  --name /pacman/last-good-tag \
+  --query Parameter.Value \
+  --output text)
+
+# Deploy it
+aws ssm send-command \
+  --document-name "AWS-RunShellScript" \
+  --targets "Key=tag:Name,Values=pacman-ai-server" \
+  --parameters "commands=['curl -sf https://raw.githubusercontent.com/shkroyas/Pacman-Game/main/scripts/deploy.sh -o /tmp/deploy.sh', 'chmod +x /tmp/deploy.sh', 'sudo /tmp/deploy.sh $LAST_GOOD 211125530162.dkr.ecr.us-east-1.amazonaws.com/pacman-game']" \
+  --region us-east-1
+```
+
+### View Logs
+
+```bash
+# CloudWatch (preferred)
+aws logs tail /pacman-game/application --follow
+
+# Direct from container
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "docker logs -f pacman-backend"
+```
+
+### Update SSM Parameters
+
+```bash
+# Update log level
+aws ssm put-parameter --name /pacman/log-level --value DEBUG --type String --overwrite
+
+# Update feature flags
+aws ssm put-parameter --name /pacman/feature-flags --value '{"new_ui":true}' --type String --overwrite
+```
+
+---
+
+## 📊 Monitoring Commands
+
+### Health Dashboard
+
+```bash
+# Quick status check
+echo "=== App Health ===" && curl -sf http://32.199.240.6:8000/api/health
+echo -e "\n=== EC2 Status ===" && aws ec2 describe-instances --instance-ids i-0e939da1aaf5336f6 --query "Reservations[0].Instances[0].[State.Name,PublicIpAddress]"
+echo -e "\n=== Docker Status ===" && ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+echo -e "\n=== Latest Deploy ===" && aws ssm get-parameter --name /pacman/last-good-tag --query Parameter.Value --output text
+```
+
+### CloudWatch Queries
+
+```bash
+# Recent errors
+aws logs filter-log-events \
+  --log-group-name /pacman-game/application \
+  --filter-pattern "ERROR" \
+  --start-time $(date -d '1 hour ago' +%s000) \
+  --query "events[*].[timestamp,message]" \
+  --output table
+
+# Request count
+aws logs filter-log-events \
+  --log-group-name /pacman-game/application \
+  --filter-pattern "GET /api/" \
+  --start-time $(date -d '1 hour ago' +%s000) \
+  --query "events | length(@)"
+```
+
+---
+
+## 🔐 Security Incidents
+
+### Suspected Unauthorized Access
+
+```bash
+# Check CloudTrail for API calls
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=ConsoleLogin \
+  --max-results 10
+
+# Check security group changes
+aws ec2 describe-security-group-attributes \
+  --group-id sg-09b658ff81bd3214c
+```
+
+### Rotate Access Keys
+
+```bash
+# Create new key
+aws iam create-access-key --user-name royas-admin
+
+# Delete old key
+aws iam delete-access-key --user-name royas-admin --access-key-id OLD_KEY_ID
+
+# Update GitHub secrets
+# Go to: https://github.com/shkroyas/Pacman-Game/settings/secrets/actions
+```
+
+---
+
+## 📋 Post-Incident Checklist
+
+After any incident:
+
+- [ ] Root cause identified
+- [ ] Fix applied and tested
+- [ ] Monitoring verified
+- [ ] Documentation updated
+- [ ] SNS notification received
+- [ ] Rollback plan documented
+- [ ] Prevention measures implemented
+
+---
+
+## 🔗 Useful Links
+
+| Resource | URL |
+|----------|-----|
+| GitHub Actions | https://github.com/shkroyas/Pacman-Game/actions |
+| Live App | http://32.199.240.6:8000 |
+| Health Check | http://32.199.240.6:8000/api/health |
+| Terraform State | s3://pacman-tf-state-211125530162 |
+| CloudWatch Logs | /pacman-game/application |
+
+---
+
+*Last updated: September 2026*
