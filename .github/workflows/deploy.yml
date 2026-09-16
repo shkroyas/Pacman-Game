@@ -34,11 +34,9 @@ jobs:
 
       - name: Install and run tests
         run: |
-          which python
           python --version
-          python -m pip install --user --upgrade pip
-          python -m pip install --user pytest flake8
-          python -m pip install --user -r requirements.txt
+          python -m ensurepip --upgrade
+          python -m pip install pytest flake8 -r requirements.txt
           python -m pytest tests/ -v
 
       - name: Run linter
@@ -103,11 +101,9 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=$EC2_INSTANCE_TAG" \
             --parameters "commands=[
-              'git config --global --add safe.directory /home/ec2-user/Pacman-Game',
-              'cd /home/ec2-user/Pacman-Game',
-              'git pull origin main',
-              'chmod +x scripts/deploy.sh',
-              'sudo /home/ec2-user/Pacman-Game/scripts/deploy.sh ${{ github.sha }} $ECR_URI'
+              'curl -sf https://raw.githubusercontent.com/shkroyas/Pacman-Game/main/scripts/deploy.sh -o /tmp/deploy.sh',
+              'chmod +x /tmp/deploy.sh',
+              'sudo /tmp/deploy.sh ${{ github.sha }} $ECR_URI'
             ]" \
             --max-concurrency "1" \
             --max-errors "0" \
@@ -118,7 +114,7 @@ jobs:
           echo "SSM Command ID: $COMMAND_ID"
 
           # Wait for command to complete
-          sleep 10
+          sleep 15
           STATUS=$(aws ssm list-command-invocations \
             --command-id "$COMMAND_ID" \
             --details \

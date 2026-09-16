@@ -5,7 +5,6 @@
 set -euo pipefail
 
 export HOME=/home/ec2-user
-cd /home/ec2-user/Pacman-Game
 
 DEPLOY_TAG="${1:?Usage: deploy.sh <image-tag>}"
 ECR_REPO="${2:?Usage: deploy.sh <tag> <ecr-repo-url>}"
@@ -13,6 +12,7 @@ HEALTH_URL="${3:-http://localhost:8000/api/health}"
 HEALTH_RETRIES=10
 HEALTH_INTERVAL=5
 LAST_GOOD_PARAM="/pacman/last-good-tag"
+CONTAINER_NAME="pacman-backend"
 
 exec > >(tee /var/log/deploy.log) 2>&1
 echo "=== Deploy started at $(date -u) ==="
@@ -29,7 +29,7 @@ PARAMS=$(aws ssm get-parameters \
 if [ -n "$PARAMS" ]; then
   echo "$PARAMS" | while IFS=$'\t' read -r name value; do
     param_key=$(echo "$name" | sed 's|/pacman/||')
-    echo "${param_key}=${value}" >> .env
+    echo "${param_key}=${value}" >> /home/ec2-user/Pacman-Game/.env
   done
   echo "Wrote .env file from SSM parameters."
 fi
@@ -41,20 +41,23 @@ aws ecr get-login-password --region us-east-1 | \
 
 docker pull "$ECR_REPO:$DEPLOY_TAG"
 
-# --- Stop old container if running ---
+# --- Stop old containers ---
 echo "Stopping old containers..."
+docker stop "$CONTAINER_NAME" 2>/dev/null || true
+docker rm "$CONTAINER_NAME" 2>/dev/null || true
 docker stop pacman-game-backend-1 2>/dev/null || true
 docker rm pacman-game-backend-1 2>/dev/null || true
 docker stop pacman-app 2>/dev/null || true
 docker rm pacman-app 2>/dev/null || true
 
-# --- Export the tag for docker-compose ---
-export IMAGE_TAG="$DEPLOY_TAG"
-export ECR_REPO_URL="$ECR_REPO"
-
-# --- Restart only the backend service ---
-echo "Restarting backend service with tag $DEPLOY_TAG..."
-/usr/local/bin/docker-compose up -d --force-recreate --no-deps backend
+# --- Start new container ---
+echo "Starting backend with tag $DEPLOY_TAG..."
+docker run -d \
+  --name "$CONTAINER_NAME" \
+  --restart unless-stopped \
+  --network host \
+  -e PYTHONUNBUFFERED=1 \
+  "$ECR_REPO:$DEPLOY_TAG"
 
 # --- Health check ---
 echo "Waiting for backend to become healthy..."
@@ -92,8 +95,14 @@ else
 
   if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "None" ]; then
     echo "Rolling back to last known good tag: $PREV_TAG"
-    export IMAGE_TAG="$PREV_TAG"
-    /usr/local/bin/docker-compose up -d --force-recreate --no-deps backend
+    docker stop "$CONTAINER_NAME" 2>/dev/null || true
+    docker rm "$CONTAINER_NAME" 2>/dev/null || true
+    docker run -d \
+      --name "$CONTAINER_NAME" \
+      --restart unless-stopped \
+      --network host \
+      -e PYTHONUNBUFFERED=1 \
+      "$ECR_REPO:$PREV_TAG"
 
     sleep $HEALTH_INTERVAL
     if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
