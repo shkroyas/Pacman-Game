@@ -40,6 +40,219 @@
 
 ---
 
+## 🎮 How to Play
+
+### Quick Start
+
+1. **Open the app**: [http://32.199.240.6:8000](http://32.199.240.6:8000)
+2. **Select a maze layout** from the dropdown
+3. **Choose an algorithm** (A* or Alpha-Beta)
+4. **Click "Solve Maze"** or **"Play Game"**
+5. **Watch the AI in action!**
+
+### Controls
+
+| Control | Description |
+|---------|-------------|
+| **Layout dropdown** | Choose which maze to solve |
+| **Algorithm dropdown** | Select the AI algorithm |
+| **Search Depth** | How deep the AI searches (1-5, higher = smarter but slower) |
+| **Solve Maze** | Watch the AI find the optimal path to the nearest dot |
+| **Play Game** | Watch a full game with ghosts |
+| **Reset** | Clear the canvas and start over |
+
+### Game Elements
+
+```
+🟡 Yellow circle  = Pacman (the AI agent)
+🔴 Red dots       = Food (collect these to score points)
+🔵 Blue circles   = Power capsules (eat to scare ghosts)
+🟥 Red ghosts     = Enemies (avoid unless scared)
+⬛ Dark walls     = Maze walls (cannot pass through)
+🟦 Blue floor     = Walkable paths
+```
+
+---
+
+## 🧠 Algorithm Deep Dive
+
+### 1. A* Search — Single Dot (`astar`)
+
+**What it does:** Finds the shortest path from Pacman to the nearest food dot.
+
+**How it works:**
+```
+f(n) = g(n) + h(n)
+
+where:
+  g(n) = actual cost from start to current position
+  h(n) = heuristic estimate from current position to goal (Manhattan distance)
+```
+
+**Example — Tiny Maze:**
+```
+Start: Pacman at (1,1)
+Goal:  Nearest dot at (3,3)
+
+A* explores positions in order of f(n):
+  → (1,1): f = 0 + 4 = 4
+  → (2,1): f = 1 + 3 = 4
+  → (1,2): f = 1 + 3 = 4
+  → (2,2): f = 2 + 2 = 4
+  → (3,2): f = 3 + 1 = 4
+  → (3,3): f = 4 + 0 = 4  ✅ Found!
+
+Result: Path East → East → North → North (4 moves)
+```
+
+**When to use:** Simple mazes without ghosts, when you want the shortest path to a single target.
+
+**What you'll see:** Pacman moves directly to the nearest dot, taking the optimal path. The yellow trail shows all positions the AI considered.
+
+---
+
+### 2. A* Search — Multi-Dot (`astar_multi`)
+
+**What it does:** Plans a path that visits ALL food dots in the maze.
+
+**How it works:**
+```
+Heuristic: Minimum distance to any uneaten food dot
+
+At each position, the AI asks:
+  "What's the closest food I haven't eaten yet?"
+  → Use that distance as the heuristic
+  → This guides the search toward collecting all dots efficiently
+```
+
+**Example — Medium Corners:**
+```
+Food positions: (1,1), (1,5), (5,1), (5,5)
+Pacman starts at (3,3)
+
+A* Multi plans a route that collects all dots:
+  → (3,3) → (1,1) → (1,5) → (5,5) → (5,1)
+
+Total moves: 12 (optimal for this layout)
+```
+
+**When to use:** Mazes with multiple dots where you want to collect everything.
+
+**What you'll see:** Pacman moves from dot to dot, collecting them all. The path shows the complete route through the maze.
+
+---
+
+### 3. A* Search — Full Clear (`astar_full`)
+
+**What it does:** Finds a path that eats every single dot in the maze.
+
+**How it works:**
+```
+Uses food-count heuristic:
+  h(n) = number of remaining food dots
+
+The AI considers:
+  1. Current position
+  2. How many dots are left
+  3. Which dot to eat next
+
+This is the most complete (but slowest) A* variant.
+```
+
+**When to use:** When you want to guarantee every dot is collected.
+
+**What you'll see:** Pacman systematically clears the entire maze, visiting every corner.
+
+---
+
+### 4. Alpha-Beta Pruning (`alpha_beta`)
+
+**What it does:** Plays a full game against ghost opponents using game-tree search.
+
+**How it works:**
+```
+                    Pacman's Turn
+                   /      |      \
+              Move1     Move2     Move3
+                /         |         \
+          Ghost1        Ghost1      Ghost1
+          / | \         / | \       / | \
+        G1  G2  G3   G1  G2  G3  G1  G2  G3
+        ... (continue to depth N)
+
+Alpha-Beta PRUNES branches that can't affect the final decision:
+  ✂️ Cut branches where Ghost's best move already makes Pacman worse
+  → Reduces search from 1,000,000 nodes to ~100,000
+```
+
+**Evaluation Function:**
+```
+score = (current_score × 1.0)
+      - (distance_to_nearest_food × 2.0)
+      - (distance_to_nearest_ghost × 0.5 if ghost is close)
+      + (bonus if ghost is scared)
+```
+
+**Example — Q2 Classic:**
+```
+Layout: Medium maze with 2 ghosts
+
+Depth 1: Pacman looks 1 move ahead
+  → Simple dodging, may miss food
+
+Depth 2: Pacman looks 2 moves ahead
+  → Better path planning, avoids traps
+
+Depth 3: Pacman looks 3 moves ahead
+  → Strategic play, sets up ghost traps
+```
+
+**When to use:** Full games with ghost opponents.
+
+**What you'll see:**
+- Pacman navigates around ghosts
+- Eats food while avoiding danger
+- Uses power capsules to scare ghosts
+- Moves become smarter with higher depth
+
+---
+
+### Algorithm Comparison
+
+| Algorithm | Speed | Intelligence | Use Case |
+|-----------|-------|-------------|----------|
+| A* Single | ⚡ Fast | Pathfinding | Simple maze, one target |
+| A* Multi | ⚡ Fast | Route planning | Collect all dots |
+| A* Full | 🐢 Slowest | Complete clearing | Visit every dot |
+| Alpha-Beta | ⚡-🐢 Depends on depth | Strategic play | Full game vs ghosts |
+
+### Search Depth Effect
+
+| Depth | Nodes Expanded | Intelligence | Speed |
+|-------|---------------|-------------|-------|
+| 1 | ~10 | Basic | ⚡⚡⚡ |
+| 2 | ~50 | Good | ⚡⚡ |
+| 3 | ~200 | Smart | ⚡ |
+| 4 | ~1,000 | Very smart | 🐢 |
+| 5 | ~5,000+ | Expert | 🐢🐢 |
+
+**Recommendation:** Start with depth 2-3 for a good balance of speed and intelligence.
+
+---
+
+### Scoring System
+
+| Action | Points |
+|--------|--------|
+| Eat food dot | +10 |
+| Eat power capsule | +100 |
+| Eat scared ghost | +200 |
+| Complete level | +500 |
+| Each move | -1 (time penalty) |
+| Eaten by ghost | Game Over |
+
+---
+
 ## 🏗️ Architecture
 
 ```mermaid
