@@ -19,6 +19,7 @@ let moveIndex = 0;
 let moves = [];
 let gameFrames = [];
 let frameIndex = 0;
+let cachedWalls = null;
 
 async function loadLayouts() {
     try {
@@ -41,6 +42,9 @@ function parseLayout(layoutStr) {
     const lines = layoutStr.split('\n');
     const height = lines.length;
     const width = Math.max(...lines.map(l => l.length));
+
+    canvas.width = width * CELL_SIZE;
+    canvas.height = height * CELL_SIZE;
 
     const walls = [];
     const food = [];
@@ -122,7 +126,10 @@ function drawFrame(frame) {
     ctx.fillStyle = COLORS.floor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    frame.walls.forEach(([x, y]) => {
+    const walls = frame.walls || cachedWalls;
+    if (frame.walls) cachedWalls = frame.walls;
+
+    walls.forEach(([x, y]) => {
         ctx.fillStyle = COLORS.wall;
         ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
     });
@@ -164,6 +171,11 @@ async function solveMaze() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({layout_name: layoutName, algorithm, depth})
         });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || 'Server error');
+        }
 
         const data = await response.json();
 
@@ -207,6 +219,11 @@ async function playGame() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({layout_name: layoutName, depth})
         });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || 'Server error');
+        }
 
         const data = await response.json();
 

@@ -34,6 +34,8 @@ class DirectionalGhost(Agent):
 
         best_action = None
         best_dist = float('inf')
+        worst_action = None
+        worst_dist = float('-inf')
         for action in legal_actions:
             dx, dy = action.get_vector()
             next_pos = (pos[0] + dx, pos[1] + dy)
@@ -41,10 +43,13 @@ class DirectionalGhost(Agent):
             if dist < best_dist:
                 best_dist = dist
                 best_action = action
+            if dist > worst_dist:
+                worst_dist = dist
+                worst_action = action
 
         if is_scared:
             if random.random() < self.prob_scared_flee:
-                return best_action
+                return worst_action
             return random.choice(legal_actions)
         else:
             if random.random() < self.prob_attack:

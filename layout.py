@@ -56,6 +56,7 @@ class GameState:
         self.agent_positions = [layout.agent_positions[i] for i in range(self.num_agents)]
         self.agent_directions = [layout.agent_directions[i] for i in range(self.num_agents)]
         self.agent_is_pacman = [layout.agent_is_pacman[i] for i in range(self.num_agents)]
+        self.agent_scared_timers = [0 for _ in range(self.num_agents)]
         self.score = 0
         self.num_food = layout.num_food
 
@@ -69,6 +70,7 @@ class GameState:
         new_state.agent_positions = list(self.agent_positions)
         new_state.agent_directions = list(self.agent_directions)
         new_state.agent_is_pacman = list(self.agent_is_pacman)
+        new_state.agent_scared_timers = list(self.agent_scared_timers)
         new_state.score = self.score
         new_state.num_food = self.num_food
         return new_state
@@ -135,6 +137,10 @@ class GameState:
         return self.num_food == 0
 
     def is_lose(self):
+        pacman_pos = self.get_pacman_position()
+        for ghost_pos in self.get_ghost_positions():
+            if pacman_pos == ghost_pos:
+                return True
         return False
 
     def __str__(self):
@@ -187,7 +193,10 @@ class AgentRules:
                 new_state.capsules.remove(new_pos)
                 new_state.score += 50
                 for i in range(1, new_state.num_agents):
-                    new_state.agent_directions[i] = Directions.STOP
+                    new_state.agent_scared_timers[i] = AgentRules.SCARED_TIME
+        else:
+            if new_state.agent_scared_timers[agent_index] > 0:
+                new_state.agent_scared_timers[agent_index] -= 1
 
         return new_state
 
@@ -236,7 +245,7 @@ class Layout:
                 elif ch in '12345678':
                     ghost_num = int(ch)
                     while len(self.agent_positions) < ghost_num:
-                        self.agent_positions.append((0, 0))
+                        self.agent_positions.append((-1, -1))
                         self.agent_directions.append(Directions.STOP)
                         self.agent_is_pacman.append(False)
                     self.agent_positions[ghost_num - 1] = (x, self.height - 1 - y)

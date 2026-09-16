@@ -8,8 +8,8 @@ def food_heuristic(state, problem):
     position, remaining_food = state
     if not remaining_food:
         return 0
-    max_dist = max(abs(position[0] - f[0]) + abs(position[1] - f[1]) for f in remaining_food)
-    return max_dist
+    min_dist = min(abs(position[0] - f[0]) + abs(position[1] - f[1]) for f in remaining_food)
+    return min_dist / 2.0
 
 
 def a_star_full_solver(problem, heuristic=None):

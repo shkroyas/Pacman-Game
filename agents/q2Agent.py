@@ -44,8 +44,8 @@ class Q2Agent(Agent):
 
     def max_value(self, state, depth, agent_index, alpha, beta):
         value = float('-inf')
-        for action in state.get_legal_actions(0):
-            successor = state.generate_successor(0, action)
+        for action in state.get_legal_actions(agent_index):
+            successor = state.generate_successor(agent_index, action)
             value = max(value, self.alpha_beta(successor, depth, agent_index, alpha, beta))
             if value > beta:
                 return value

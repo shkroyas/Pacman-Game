@@ -3,6 +3,7 @@ FastAPI backend for Pacman AI demo.
 """
 import sys
 import os
+import asyncio
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi import FastAPI, HTTPException
@@ -85,24 +86,26 @@ async def solve(request: SolveRequest):
         raise HTTPException(status_code=404, detail=f"Layout '{request.layout_name}' not found")
 
     state = GameState(layout)
-    agent = Q2Agent(depth=request.depth)
 
-    if request.algorithm == "astar":
-        problem = Q1aProblem(state)
-        import time
-        start_time = time.time()
-        actions = a_star_solver(problem, manhattan_heuristic)
-        search_time = time.time() - start_time
-    elif request.algorithm == "astar_multi":
-        problem = Q1bProblem(state)
-        actions = a_star_multi_solver(problem, min_food_heuristic)
-        search_time = 0
-    elif request.algorithm == "astar_full":
-        problem = Q1cProblem(state)
-        actions = a_star_full_solver(problem)
-        search_time = 0
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown algorithm: {request.algorithm}")
+    async def _run_solve():
+        if request.algorithm == "astar":
+            problem = Q1aProblem(state)
+            return a_star_solver(problem, manhattan_heuristic)
+        elif request.algorithm == "astar_multi":
+            problem = Q1bProblem(state)
+            return a_star_multi_solver(problem, min_food_heuristic)
+        elif request.algorithm == "astar_full":
+            problem = Q1cProblem(state)
+            return a_star_full_solver(problem)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown algorithm: {request.algorithm}")
+
+    try:
+        actions = await asyncio.wait_for(asyncio.to_thread(
+            lambda: asyncio.get_event_loop().run_until_complete(_run_solve())
+        ), timeout=10.0)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=408, detail="Solver timed out (10s limit)")
 
     moves = []
     current_state = state
@@ -142,6 +145,7 @@ async def play(request: PlayRequest):
 
     frames = []
     max_moves = request.max_moves
+    walls_sent = False
 
     for move_num in range(max_moves):
         current_state_dict = {
@@ -150,10 +154,15 @@ async def play(request: PlayRequest):
             "food": [list(f) for f in state.get_food_positions()],
             "capsules": [list(c) for c in state.get_capsules()],
             "score": state.get_score(),
-            "walls": [[x, y] for x in range(state.get_walls().width)
-                      for y in range(state.get_walls().height)
-                      if state.get_walls().is_wall(x, y)]
         }
+        if not walls_sent:
+            current_state_dict["walls"] = [
+                [x, y]
+                for x in range(state.get_walls().width)
+                for y in range(state.get_walls().height)
+                if state.get_walls().is_wall(x, y)
+            ]
+            walls_sent = True
         frames.append(current_state_dict)
 
         if state.is_win() or state.is_lose():
