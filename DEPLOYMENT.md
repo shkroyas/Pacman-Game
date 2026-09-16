@@ -460,6 +460,30 @@ ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
 
 ---
 
+### Issue: Solver timeout (408)
+
+**Symptom**: API returns `408` status code
+
+**Cause**: Solver took more than 10 seconds (large layout + high depth)
+
+**Solution**:
+- Reduce search depth (2-3 recommended)
+- Use simpler layout
+- For full-clear algorithm, expect longer solve times
+
+### Issue: Canvas not rendering
+
+**Symptom**: Game area blank or cut off
+
+**Cause**: Layout data missing or JavaScript error
+
+**Solution**:
+- Check browser console for errors
+- Verify API returns valid layout data
+- Canvas auto-resizes to match layout dimensions
+
+---
+
 ## 🔄 Deployment Flow Diagram
 
 ```

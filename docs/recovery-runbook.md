@@ -115,6 +115,50 @@ ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
 
 ## 🟡 Warning Issues
 
+### Solver Timeout
+
+**Symptoms:**
+- API returns `408` status code
+- Request takes more than 10 seconds
+
+**Causes:**
+- Large layout with high depth setting
+- Complex full-clear pathfinding
+
+**Resolution:**
+```bash
+# Check solver logs
+ssh -i ~/.ssh/pacman-ai-key.pem ec2-user@32.199.240.6 \
+  "docker logs pacman-backend --tail 20 | grep -i timeout"
+
+# Reduce depth in UI (2-3 recommended)
+# Or use simpler layout
+```
+
+### Canvas Not Rendering
+
+**Symptoms:**
+- Game area appears blank or cut off
+- Layout elements missing
+
+**Causes:**
+- JavaScript error in console
+- API response missing layout data
+
+**Resolution:**
+```bash
+# Check browser console for errors
+# Verify API returns valid layout
+curl -s http://32.199.240.6:8000/api/layouts | python3 -m json.tool
+
+# Test layout endpoint
+curl -s -X POST http://32.199.240.6:8000/api/solve \
+  -H "Content-Type: application/json" \
+  -d '{"layout_name":"tinyMaze","algorithm":"astar"}' | python3 -m json.tool
+```
+
+---
+
 ### High CPU Usage
 
 **Threshold:** >80% for 5 minutes

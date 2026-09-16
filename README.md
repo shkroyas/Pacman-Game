@@ -46,31 +46,39 @@
 
 1. **Open the app**: [http://32.199.240.6:8000](http://32.199.240.6:8000)
 2. **Select a maze layout** from the dropdown
-3. **Choose an algorithm** (A* or Alpha-Beta)
-4. **Click "Solve Maze"** or **"Play Game"**
-5. **Watch the AI in action!**
+3. **Choose an algorithm** (A* Single, Multi, or Full Clear)
+4. **Set search depth** (2-3 recommended for best balance)
+5. **Click "Solve Maze"** to watch pathfinding, or **"Play Game"** for a full game with ghosts
 
 ### Controls
 
 | Control | Description |
 |---------|-------------|
-| **Layout dropdown** | Choose which maze to solve |
+| **Layout dropdown** | Choose which maze to solve (loaded dynamically from API) |
 | **Algorithm dropdown** | Select the AI algorithm |
 | **Search Depth** | How deep the AI searches (1-5, higher = smarter but slower) |
 | **Solve Maze** | Watch the AI find the optimal path to the nearest dot |
-| **Play Game** | Watch a full game with ghosts |
+| **Play Game** | Watch a full game with ghosts, capsules, and scoring |
 | **Reset** | Clear the canvas and start over |
 
 ### Game Elements
 
 ```
 🟡 Yellow circle  = Pacman (the AI agent)
-🔴 Red dots       = Food (collect these to score points)
-🔵 Blue circles   = Power capsules (eat to scare ghosts)
-🟥 Red ghosts     = Enemies (avoid unless scared)
+🔴 Red dots       = Food (collect these to score +10 points each)
+🔵 Blue circles   = Power capsules (eat to score +50 and scare ghosts for 40 moves)
+🟥 Red ghosts     = Enemies (avoid unless scared — touching them ends the game)
 ⬛ Dark walls     = Maze walls (cannot pass through)
 🟦 Blue floor     = Walkable paths
 ```
+
+### Game Rules
+
+- **Eat food** to score points (+10 per dot)
+- **Eat power capsules** to scare ghosts (+50 points, ghosts flee for 40 moves)
+- **Eat scared ghosts** for bonus points (+200 each)
+- **Avoid active ghosts** — touching one ends the game
+- **Clear all food** to win the level
 
 ---
 
@@ -188,10 +196,16 @@ Alpha-Beta PRUNES branches that can't affect the final decision:
 **Evaluation Function:**
 ```
 score = (current_score × 1.0)
-      - (distance_to_nearest_food × 2.0)
-      - (distance_to_nearest_ghost × 0.5 if ghost is close)
-      + (bonus if ghost is scared)
+      + (food_proximity_bonus)
+      - (ghost_danger_penalty if ghost is close and active)
+      + (ghost_hunting_bonus if ghost is scared)
+      - (remaining_food_penalty)
 ```
+
+**Ghost Behavior:**
+- **Active ghosts**: Chase Pacman (80% chance take closest action)
+- **Scared ghosts**: Flee from Pacman (80% chance take farthest action)
+- **Scared duration**: 40 moves after capsule pickup
 
 **Example — Q2 Classic:**
 ```
@@ -212,8 +226,8 @@ Depth 3: Pacman looks 3 moves ahead
 **What you'll see:**
 - Pacman navigates around ghosts
 - Eats food while avoiding danger
-- Uses power capsules to scare ghosts
-- Moves become smarter with higher depth
+- Uses power capsules to scare ghosts (they flee for 40 moves!)
+- Game ends if a ghost catches Pacman
 
 ---
 
@@ -245,9 +259,9 @@ Depth 3: Pacman looks 3 moves ahead
 | Action | Points |
 |--------|--------|
 | Eat food dot | +10 |
-| Eat power capsule | +100 |
+| Eat power capsule | +50 |
 | Eat scared ghost | +200 |
-| Complete level | +500 |
+| Complete level (all food eaten) | Win |
 | Each move | -1 (time penalty) |
 | Eaten by ghost | Game Over |
 
@@ -264,7 +278,7 @@ graph TB
         
         subgraph EC2["🖥️ EC2 t3.micro"]
             Nginx["🔀 Nginx<br/>:80 / :443"]
-            Backend["🐍 FastAPI Backend<br/>:8000"]
+            Backend["🐍 FastAPI Backend<br/>:8000<br/>10s solver timeout"]
             Certbot["🔒 Certbot<br/>TLS Renewal"]
         end
         
@@ -317,7 +331,7 @@ graph TB
 │  └──────┬──────┘  └──────┬──────┘                           │
 │         └───────┬────────┘                                  │
 │                 ▼                                            │
-│  ✅ All tests pass                                           │
+│  ✅ All tests pass · ✅ No lint errors                       │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
@@ -340,7 +354,7 @@ graph TB
 │  │  1. curl deploy.sh from GitHub                       │     │
 │  │  2. docker pull ${ECR}:${SHA}                        │     │
 │  │  3. docker stop old container                        │     │
-│  │  4. docker run new container                         │     │
+│  │  4. docker run new container (--network host)        │     │
 │  │  5. curl /api/health (10 retries)                    │     │
 │  │  6. ✅ Health check passed → update SSM param         │     │
 │  │     ❌ Health check failed → rollback to last good    │     │
@@ -370,7 +384,7 @@ A* Search:    Check SMART paths   → O(b^(d/2)) operations
 |-----------|-------------|-----------|
 | **Q1a** | Single dot search | Manhattan distance |
 | **Q1b** | Multi-dot search | Minimum food distance |
-| **Q1c** | Full board clear | Food count remaining |
+| **Q1c** | Full board clear | Half minimum food distance (admissible) |
 
 ### Alpha-Beta Pruning — Adversarial Decision Making
 
@@ -528,16 +542,21 @@ See [full cost analysis →](docs/cost-estimate.md)
 
 ```
 pacman-game/
-├── backend/main.py              # FastAPI application
-├── frontend/                    # HTML5 Canvas UI
+├── backend/main.py              # FastAPI application (10s solver timeout)
+├── frontend/                    # HTML5 Canvas UI (auto-resizing)
+│   ├── index.html              # Dynamic layout loading
+│   └── app.js                  # Canvas rendering, API calls
 ├── agents/                      # AI agent implementations
 │   ├── q2Agent.py              # Alpha-Beta pruning agent
+│   ├── ghostAgents.py          # Ghost behaviors (directional, random)
 │   └── pacmanAgents.py         # Simple agent
 ├── solvers/                     # A* search implementations
 │   ├── q1a_solver.py           # Single dot A*
 │   ├── q1b_solver.py           # Multi-dot A*
-│   └── q1c_solver.py           # Full clear A*
+│   └── q1c_solver.py           # Full clear A* (admissible heuristic)
 ├── problems/                    # Problem definitions
+├── layout.py                    # Game state, AgentRules, ghost collision
+├── game.py                      # Agent base class, Directions, Game loop
 ├── tests/                       # Unit tests (8 tests)
 ├── layouts/                     # Maze layout files
 ├── terraform/                   # Infrastructure as Code
@@ -555,20 +574,25 @@ pacman-game/
 ├── .github/workflows/deploy.yml # CI/CD pipeline
 ├── docker-compose.yml           # Nginx + Backend + Certbot
 ├── Dockerfile                   # Python 3.11 slim
-└── requirements.txt             # Python dependencies
+└── requirements.txt             # Python dependencies (no numpy)
 ```
 
 ---
 
 ## 🔧 API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Web UI |
-| `/api/layouts` | GET | List maze layouts |
-| `/api/solve` | POST | Solve maze with A* |
-| `/api/play` | POST | Play game with Alpha-Beta |
-| `/api/health` | GET | Health check |
+| Endpoint | Method | Description | Timeout |
+|----------|--------|-------------|---------|
+| `/` | GET | Web UI | - |
+| `/api/layouts` | GET | List maze layouts | - |
+| `/api/solve` | POST | Solve maze with A* | 10 seconds |
+| `/api/play` | POST | Play game with Alpha-Beta | 10 seconds |
+| `/api/health` | GET | Health check | - |
+
+**Error Responses:**
+- `400` — Unknown algorithm
+- `404` — Layout not found
+- `408` — Solver timed out (10s limit)
 
 ---
 
@@ -579,6 +603,30 @@ pacman-game/
 - **TLS termination** — Nginx handles HTTPS (once configured)
 - **Secrets in SSM** — No hardcoded credentials
 - **ECR lifecycle** — Untagged images auto-deleted after 7 days
+- **Solver timeout** — 10s limit prevents DoS via expensive queries
+- **Input validation** — FastAPI request models validate all inputs
+
+---
+
+## 🧹 Code Quality
+
+### Audit Fixes (v2)
+
+All 14 issues from the code audit have been resolved:
+
+| Severity | Count | Status |
+|----------|-------|--------|
+| 🔴 Critical | 5 | ✅ Fixed |
+| 🟠 High | 5 | ✅ Fixed |
+| 🟡 Medium | 4 | ✅ Fixed |
+
+**Key Fixes:**
+- Ghost collision now properly ends the game
+- Power capsules activate scared state (ghosts flee for 40 moves)
+- Ghost scared behavior: flees instead of chases
+- Canvas auto-resizes to match layout dimensions
+- API timeout prevents server blocking
+- Frontend error handling for failed requests
 
 ---
 
@@ -606,6 +654,10 @@ python -m pytest tests/ -v
 # Run with coverage
 python -m pytest tests/ -v --tb=short
 ```
+
+**Test Categories:**
+- **test_q1a_solver.py** — A* single dot solver (4 tests)
+- **test_q2_agent.py** — Alpha-Beta agent (4 tests)
 
 ---
 

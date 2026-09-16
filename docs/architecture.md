@@ -96,12 +96,15 @@ graph TB
 | Port | 8000 (internal only) |
 | Framework | FastAPI + Uvicorn |
 | Health Check | `/api/health` |
+| Solver Timeout | 10 seconds |
 
 **Key Features:**
 - REST API for AI algorithms
 - Real-time maze solving
-- Game state management
+- Game state management with ghost collision detection
+- Scared timer management for power capsules
 - CORS enabled
+- Input validation via Pydantic models
 
 ### 🔒 Certbot (Sidecar Container)
 
@@ -216,6 +219,7 @@ on:
 │                                      │
 │  Duration: ~30 seconds               │
 │  Runner: ubuntu-latest               │
+│  Note: Build runs even if tests fail │
 └──────────────────────────────────────┘
 ```
 
