@@ -10,3 +10,22 @@ venv/
 *.egg-info/
 node_modules/
 docs/demo_frames/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfplan
+terraform/.terraform.lock.hcl
+terraform/*.tfvars
+
+# Certbot
+nginx/certbot/conf/
+nginx/certbot/www/
+
+# Docker
+docker-compose.override.yml
+
+# Temp
+/tmp/
+*.log

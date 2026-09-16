@@ -1,0 +1,140 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip tests (emergency deploy)'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: pacman-game
+  EC2_INSTANCE_TAG: pacman-game-instance
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.skip_tests != 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest flake8
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+      - name: Run linter
+        run: python -m flake8 --max-line-length 100 --ignore=E501,W503 .
+
+  build-and-push:
+    name: Build & Push to ECR
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      image_tag: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        run: |
+          docker build -t $ECR_REPOSITORY:${{ github.sha }} .
+          docker tag $ECR_REPOSITORY:${{ github.sha }} $ECR_REPOSITORY:latest
+
+      - name: Push to ECR
+        run: |
+          ECR_URI="${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY"
+          docker tag $ECR_REPOSITORY:${{ github.sha }} $ECR_URI:${{ github.sha }}
+          docker tag $ECR_REPOSITORY:latest $ECR_URI:latest
+          docker push $ECR_URI:${{ github.sha }}
+          docker push $ECR_URI:latest
+
+      - name: Output ECR URI
+        id: ecr
+        run: echo "uri=${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy via SSM
+        run: |
+          ECR_URI=$(aws ecr describe-repositories \
+            --repository-names $ECR_REPOSITORY \
+            --query "repositories[0].repositoryUri" \
+            --output text)
+
+          echo "Deploying tag ${{ github.sha }} to EC2..."
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=$EC2_INSTANCE_TAG" \
+            --parameters "commands=[
+              'cd /home/ec2-user/Pacman-Game',
+              'git pull origin main',
+              'sudo /home/ec2-user/Pacman-Game/scripts/deploy.sh ${{ github.sha }} $ECR_URI'
+            ]" \
+            --max-concurrency "1" \
+            --max-errors "0" \
+            --output json \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          # Wait for command to complete
+          sleep 10
+          STATUS=$(aws ssm list-command-invocations \
+            --command-id "$COMMAND_ID" \
+            --details \
+            --query "CommandInvocations[0].Status" \
+            --output text)
+
+          echo "Deploy status: $STATUS"
+          if [ "$STATUS" != "Success" ]; then
+            echo "Deploy failed!"
+            aws ssm list-command-invocations \
+              --command-id "$COMMAND_ID" \
+              --details \
+              --query "CommandInvocations[0].CommandPlugins[0].Output"
+            exit 1
+          fi

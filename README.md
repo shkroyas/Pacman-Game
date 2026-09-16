@@ -10,8 +10,8 @@ A web-based Pacman AI demonstration showcasing **A\* search** and **Alpha-Beta p
 
 ## Live Demo
 
-[![Deploy](https://img.shields.io/badge/Deploy-AWS%20EC2-blue)](http://52.91.111.241:8000)
-[![Live](https://img.shields.io/badge/Live-App-green)](http://52.91.111.241:8000)
+[![Deploy](https://img.shields.io/badge/Deploy-AWS%20EC2-blue)](http://32.199.240.6)
+[![Live](https://img.shields.io/badge/Live-App-green)](http://32.199.240.6)
 [![Video](https://img.shields.io/badge/Video-Watch-red)](docs/pacman_ai_demo.mp4)
 
 ## Algorithms Implemented
@@ -42,7 +42,9 @@ A web-based Pacman AI demonstration showcasing **A\* search** and **Alpha-Beta p
 
 - **Backend**: Python, FastAPI
 - **Frontend**: HTML5 Canvas, JavaScript
-- **Deployment**: Docker, AWS EC2
+- **Deployment**: Docker, Nginx, AWS EC2, Terraform
+- **CI/CD**: GitHub Actions → ECR → SSM → EC2
+- **Monitoring**: CloudWatch Logs, Alarms, Synthetics Canary
 
 ## Quick Start
 
@@ -65,11 +67,11 @@ open http://localhost:8000
 # Build image
 docker build -t pacman-ai .
 
-# Run container
-docker run -p 8000:8000 pacman-ai
+# Run with docker-compose (includes Nginx reverse proxy)
+docker compose up -d
 
-# Or use docker-compose
-docker-compose up
+# Or run standalone (dev mode)
+docker run -p 8000:8000 pacman-ai
 ```
 
 ## Project Structure
@@ -97,13 +99,33 @@ pacman-game/
 │   └── q1c_solver.py         # Full clear solver
 ├── layouts/                  # Maze layout files
 ├── tests/                    # Unit tests
+├── terraform/                # Infrastructure as Code
+│   ├── main.tf               # Provider & backend config
+│   ├── ec2.tf                # EC2 instance + Elastic IP
+│   ├── ecr.tf                # ECR repository + lifecycle
+│   ├── security_groups.tf    # Firewall rules
+│   ├── iam.tf                # EC2 instance role (SSM, ECR, CloudWatch)
+│   ├── cloudwatch.tf         # Logs, alarms, Synthetics canary
+│   ├── ssm.tf                # Parameter Store entries
+│   ├── network.tf            # VPC/subnet data sources
+│   ├── variables.tf          # Input variables
+│   └── outputs.tf            # Exported values
+├── nginx/
+│   └── nginx.conf            # Reverse proxy config
+├── scripts/
+│   ├── deploy.sh             # Automated deploy + rollback
+│   ├── bootstrap.sh          # EC2 first-boot setup
+│   └── renew-cert.sh         # TLS certificate renewal
+├── .github/workflows/
+│   ├── ci.yml                # Test on PRs
+│   └── deploy.yml            # Build → ECR → SSM deploy
 ├── docs/
-│   ├── pacman_demo.gif       # Main demo GIF
-│   ├── pacman_astar_demo.gif # A* search demo
-│   ├── pacman_gameplay_demo.gif # Gameplay demo
-│   └── pacman_ai_demo.mp4    # Full demo video
+│   ├── architecture.md       # System design docs
+│   ├── cost-estimate.md      # Monthly cost breakdown
+│   ├── recovery-runbook.md   # Incident response
+│   └── *.gif/mp4             # Demo media
 ├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yml        # Nginx + backend + certbot
 └── requirements.txt
 ```
 
@@ -127,25 +149,57 @@ pacman-game/
 
 ## AWS Deployment
 
-### EC2 Setup
+### Prerequisites
 
-1. Launch EC2 instance (t2.micro, Amazon Linux 2)
-2. Install Docker:
-   ```bash
-   sudo yum update -y
-   sudo yum install docker -y
-   sudo service docker start
-   sudo usermod -a -G docker ec2-user
-   ```
+- AWS CLI configured with access keys
+- Terraform installed locally
+- GitHub repository secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 
-3. Clone and deploy:
-   ```bash
-   git clone https://github.com/shkroyas/Pacman-Game.git
-   cd Pacman-Game
-   docker-compose up -d
-   ```
+### Initial Setup
 
-4. Open port 8000 in security group
+```bash
+# 1. Create Terraform backend (S3 + DynamoDB for state locking)
+aws s3 mb s3://pacman-terraform-state --region us-east-1
+aws dynamodb create-table \
+  --table-name terraform-locks \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1
+
+# 2. Import existing EC2 instance (if you have one running)
+cd terraform/
+terraform init
+terraform import aws_instance.app i-XXXXXXXXXXXXXXXXX
+terraform import aws_security_group.app sg-XXXXXXXXXXXXXXXXX
+
+# 3. Deploy infrastructure
+terraform plan
+terraform apply
+```
+
+### CI/CD Pipeline
+
+Push to `main` branch triggers:
+1. **Test** — pytest + flake8
+2. **Build & Push** — Docker image tagged with Git SHA → ECR
+3. **Deploy** — SSM Run Command pulls new image and restarts the backend
+
+### Manual Deploy
+
+```bash
+# Via SSM from your local machine
+aws ssm send-command \
+  --document-name "AWS-RunShellScript" \
+  --targets "Key=tag:Name,Values=pacman-game-instance" \
+  --parameters "commands=['cd /home/ec2-user/Pacman-Game && sudo ./scripts/deploy.sh <git-sha> <ecr-repo-url>']"
+```
+
+### Architecture
+
+See [docs/architecture.md](docs/architecture.md) for full system design.
+See [docs/cost-estimate.md](docs/cost-estimate.md) for monthly cost breakdown.
+See [docs/recovery-runbook.md](docs/recovery-runbook.md) for incident response.
 
 ## Impact of AI in This Project
 
