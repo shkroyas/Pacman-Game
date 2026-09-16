@@ -13,6 +13,10 @@ def a_star_solver(problem, heuristic=None):
         heuristic = manhattan_heuristic
 
     start = problem.get_start_state()
+
+    if problem.goal_position is None:
+        return []
+
     frontier = PriorityQueue()
     frontier.push(start, heuristic(start, problem.goal_position))
 
