@@ -103,8 +103,10 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=$EC2_INSTANCE_TAG" \
             --parameters "commands=[
+              'git config --global --add safe.directory /home/ec2-user/Pacman-Game',
               'cd /home/ec2-user/Pacman-Game',
               'git pull origin main',
+              'chmod +x scripts/deploy.sh',
               'sudo /home/ec2-user/Pacman-Game/scripts/deploy.sh ${{ github.sha }} $ECR_URI'
             ]" \
             --max-concurrency "1" \
