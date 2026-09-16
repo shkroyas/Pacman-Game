@@ -6,6 +6,8 @@
 
 set -euo pipefail
 
+export HOME=/home/ec2-user
+
 DEPLOY_TAG="${1:?Usage: deploy.sh <image-tag>}"
 ECR_REPO="${2:?Usage: deploy.sh <tag> <ecr-repo-url>}"
 HEALTH_URL="${3:-http://localhost:8000/api/health}"
@@ -48,7 +50,7 @@ export ECR_REPO_URL="$ECR_REPO"
 
 # --- Restart only the backend service ---
 echo "Restarting backend service with tag $DEPLOY_TAG..."
-docker compose up -d --force-recreate --no-deps backend
+docker-compose up -d --force-recreate --no-deps backend
 
 # --- Health check ---
 echo "Waiting for backend to become healthy..."
@@ -89,7 +91,7 @@ else
   if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "None" ]; then
     echo "Rolling back to last known good tag: $PREV_TAG"
     export IMAGE_TAG="$PREV_TAG"
-    docker compose up -d --force-recreate --no-deps backend
+    docker-compose up -d --force-recreate --no-deps backend
 
     sleep $HEALTH_INTERVAL
     if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then

@@ -32,14 +32,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install and run tests
         run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest flake8
-
-      - name: Run tests
-        run: pytest tests/ -v
+          pip install pytest flake8 -r requirements.txt
+          pytest tests/ -v
 
       - name: Run linter
         run: flake8 --max-line-length 120 --exclude=venv,.venv,__pycache__,.git --ignore=E501,W503,W504,E402,F401,F841,F821,E128,E722,E226 .
