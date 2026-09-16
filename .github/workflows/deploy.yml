@@ -14,7 +14,7 @@ on:
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: pacman-game
-  EC2_INSTANCE_TAG: pacman-game-instance
+  EC2_INSTANCE_TAG: pacman-ai-server
 
 permissions:
   contents: read
@@ -35,8 +35,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest flake8
+          python -m pip install -r requirements.txt
+          python -m pip install pytest flake8
 
       - name: Run tests
         run: python -m pytest tests/ -v
@@ -52,15 +52,6 @@ jobs:
       image_tag: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Debug secrets
-        run: |
-          echo "AWS_ACCESS_KEY_ID length: ${#AWS_ACCESS_KEY_ID}"
-          echo "AWS_ACCESS_KEY_ID set: ${{ secrets.AWS_KEY_ACCESS_ID != '' }}"
-          echo "AWS_SECRET_ACCESS_KEY set: ${{ secrets.AWS_SECRET_ACCESS_KEY != '' }}"
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_KEY_ACCESS_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -86,24 +77,12 @@ jobs:
           docker push $ECR_URI:${{ github.sha }}
           docker push $ECR_URI:latest
 
-      - name: Output ECR URI
-        id: ecr
-        run: echo "uri=${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY" >> "$GITHUB_OUTPUT"
-
   deploy:
     name: Deploy to EC2
     runs-on: ubuntu-latest
     needs: build-and-push
     steps:
       - uses: actions/checkout@v4
-
-      - name: Debug secrets
-        run: |
-          echo "AWS_ACCESS_KEY_ID set: ${{ secrets.AWS_KEY_ACCESS_ID != '' }}"
-          echo "AWS_SECRET_ACCESS_KEY set: ${{ secrets.AWS_SECRET_ACCESS_KEY != '' }}"
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_KEY_ACCESS_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
