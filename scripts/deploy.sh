@@ -1,12 +1,11 @@
 #!/bin/bash
 # deploy.sh — Deploy a new Docker image tag to the Pacman game backend.
 # Called by SSM Run Command from GitHub Actions.
-# Restarts only the backend service (Nginx stays unaffected).
-# Performs health check; rolls back on failure.
 
 set -euo pipefail
 
 export HOME=/home/ec2-user
+cd /home/ec2-user/Pacman-Game
 
 DEPLOY_TAG="${1:?Usage: deploy.sh <image-tag>}"
 ECR_REPO="${2:?Usage: deploy.sh <tag> <ecr-repo-url>}"
@@ -14,13 +13,12 @@ HEALTH_URL="${3:-http://localhost:8000/api/health}"
 HEALTH_RETRIES=10
 HEALTH_INTERVAL=5
 LAST_GOOD_PARAM="/pacman/last-good-tag"
+DOCKER_COMPOSE="/usr/local/bin/docker-compose"
 
 exec > >(tee /var/log/deploy.log) 2>&1
 echo "=== Deploy started at $(date -u) ==="
 echo "Tag: $DEPLOY_TAG"
 echo "ECR Repo: $ECR_REPO"
-
-cd /home/ec2-user/Pacman-Game
 
 # --- Fetch SSM config parameters ---
 echo "Fetching parameters from SSM Parameter Store..."
@@ -44,13 +42,18 @@ aws ecr get-login-password --region us-east-1 | \
 
 docker pull "$ECR_REPO:$DEPLOY_TAG"
 
+# --- Stop any old container running the backend ---
+echo "Cleaning up old containers..."
+docker stop pacman-app 2>/dev/null || true
+docker rm pacman-app 2>/dev/null || true
+
 # --- Export the tag for docker-compose ---
 export IMAGE_TAG="$DEPLOY_TAG"
 export ECR_REPO_URL="$ECR_REPO"
 
 # --- Restart only the backend service ---
 echo "Restarting backend service with tag $DEPLOY_TAG..."
-docker-compose up -d --force-recreate --no-deps backend
+$DOCKER_COMPOSE up -d --force-recreate --no-deps backend
 
 # --- Health check ---
 echo "Waiting for backend to become healthy..."
@@ -67,7 +70,6 @@ for i in $(seq 1 $HEALTH_RETRIES); do
 done
 
 if [ "$healthy" = true ]; then
-  # --- Update last-good-tag ---
   echo "Updating last-good-tag SSM parameter to $DEPLOY_TAG..."
   aws ssm put-parameter \
     --name "$LAST_GOOD_PARAM" \
@@ -81,7 +83,6 @@ if [ "$healthy" = true ]; then
 else
   echo "HEALTH CHECK FAILED after $HEALTH_RETRIES attempts."
 
-  # --- Rollback: re-pull and restart the previous tag ---
   echo "Attempting rollback..."
   PREV_TAG=$(aws ssm get-parameter \
     --name "$LAST_GOOD_PARAM" \
@@ -91,7 +92,7 @@ else
   if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "None" ]; then
     echo "Rolling back to last known good tag: $PREV_TAG"
     export IMAGE_TAG="$PREV_TAG"
-    docker-compose up -d --force-recreate --no-deps backend
+    $DOCKER_COMPOSE up -d --force-recreate --no-deps backend
 
     sleep $HEALTH_INTERVAL
     if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then

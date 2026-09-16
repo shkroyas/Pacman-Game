@@ -34,11 +34,12 @@ jobs:
 
       - name: Install and run tests
         run: |
-          pip install pytest flake8 -r requirements.txt
-          pytest tests/ -v
+          python -m pip install --upgrade pip
+          python -m pip install pytest flake8 -r requirements.txt
+          python -m pytest tests/ -v
 
       - name: Run linter
-        run: flake8 --max-line-length 120 --exclude=venv,.venv,__pycache__,.git --ignore=E501,W503,W504,E402,F401,F841,F821,E128,E722,E226 .
+        run: python -m flake8 --max-line-length 120 --exclude=venv,.venv,__pycache__,.git --ignore=E501,W503,W504,E402,F401,F841,F821,E128,E722,E226 .
 
   build-and-push:
     name: Build & Push to ECR
