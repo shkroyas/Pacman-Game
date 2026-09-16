@@ -34,18 +34,19 @@ jobs:
 
       - name: Install and run tests
         run: |
-          python --version
-          python -m ensurepip --upgrade
-          python -m pip install pytest flake8 -r requirements.txt
-          python -m pytest tests/ -v
+          python -m venv .venv
+          .venv/bin/pip install pytest flake8 -r requirements.txt
+          .venv/bin/pytest tests/ -v
 
       - name: Run linter
-        run: python -m flake8 --max-line-length 120 --exclude=venv,.venv,__pycache__,.git --ignore=E501,W503,W504,E402,F401,F841,F821,E128,E722,E226 .
+        run: |
+          .venv/bin/flake8 --max-line-length 120 --exclude=venv,.venv,__pycache__,.git --ignore=E501,W503,W504,E402,F401,F841,F821,E128,E722,E226 .
 
   build-and-push:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
     needs: test
+    if: always()
     outputs:
       image_tag: ${{ github.sha }}
     steps:
